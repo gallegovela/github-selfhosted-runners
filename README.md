@@ -1,0 +1,56 @@
+# gallegovela-github-selfhosted-runners
+
+Runners de GitHub Actions autoalojados (self-hosted) para la organización
+`gallegovela`. Cada runner se ejecuta como contenedor Docker en una única
+máquina virtual, y se registra contra la organización (no contra un repo
+concreto) para poder atender workflows de cualquier repo que lo necesite.
+
+## Estructura
+
+Cada subcarpeta es un runner independiente, con su propio `Dockerfile` y
+`entrypoint.sh`:
+
+- `claude/` — runner para el workflow `.github/workflows/issue-pipeline.yml`
+  (label `ionosL1`). Incluye `git`, `gh`, `ssh` y la CLI de `claude`.
+
+Al añadir un nuevo runner, se crea una carpeta nueva con su propio
+`Dockerfile`/`entrypoint.sh`, minimal para lo que ese workflow concreto
+necesita — no se comparte una imagen "todo incluido" entre runners.
+
+## Registro contra la organización
+
+Los runners se autentican como una GitHub App (no con un token de
+registro estático, que caduca en ~1h) y usan la API de GitHub para:
+
+1. Generar un JWT firmado con la clave privada de la App.
+2. Cambiarlo por un installation access token.
+3. Pedir con ese token un registration token de la organización.
+4. Registrar el runner (`config.sh`) con ese token y arrancarlo (`run.sh`).
+
+Al parar el contenedor (`SIGTERM`/`SIGINT`) se desregistra automáticamente
+para no dejar runners "offline" colgados en la organización.
+
+Variables de entorno requeridas por runner:
+
+- `GITHUB_ORG`
+- `GITHUB_APP_ID`
+- `GITHUB_APP_INSTALLATION_ID`
+- `GITHUB_APP_PRIVATE_KEY_PATH` (ruta a la `.pem`, montada como volumen)
+- `RUNNER_NAME` / `RUNNER_LABELS` (opcionales)
+
+## Estado y secretos
+
+Nada sensible se hornea en la imagen. Se monta como volumen en tiempo de
+ejecución:
+
+- La clave privada de la GitHub App (`.pem`).
+- La clave SSH privada que usan los workflows para hacer `git push`.
+- La sesión/autenticación de `claude` (`~/.claude`,
+  `~/.local/share/claude`), que se inicia una vez de forma interactiva
+  tras levantar el contenedor (el login OAuth no se puede scriptar).
+
+## TODO
+
+- Automatizar el despliegue de los contenedores en la VM (docker compose
+  o similar).
+- Añadir el resto de runners a medida que se necesiten nuevos workflows.

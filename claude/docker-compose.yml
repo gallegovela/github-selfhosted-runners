@@ -1,0 +1,35 @@
+services:
+  claude-runner:
+    build: .
+    image: gallegovela-github-selfhosted-runners/claude-runner:latest
+    container_name: gh-runner-claude
+    restart: unless-stopped
+    # The entrypoint makes a chain of calls to the GitHub API
+    # (JWT -> installation token -> registration token) to
+    # deregister on SIGTERM; compose's default grace period
+    # (10s) is too short for that.
+    stop_grace_period: 30s
+    environment:
+      GITHUB_ORG: ${GITHUB_ORG:?GITHUB_ORG is required}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?GITHUB_APP_ID is required}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:?GITHUB_APP_INSTALLATION_ID is required}
+      GITHUB_APP_PRIVATE_KEY_PATH: /home/runner/secrets/github-app-private-key.pem
+      RUNNER_NAME: ${RUNNER_NAME:-claude-runner-1}
+      RUNNER_LABELS: ${RUNNER_LABELS:-ionosL1}
+    volumes:
+      # Secrets: never baked into the image (see Dockerfile).
+      - ./secrets/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      - ./secrets/id_ed25519:/home/runner/.ssh/id_ed25519:ro
+      # `claude` session (OAuth login is interactive, done once
+      # after the first startup and must survive container
+      # recreations).
+      - claude-config:/home/runner/.claude
+      - claude-data:/home/runner/.local/share/claude
+      # Runner work directory, so the tool/checkout cache isn't lost
+      # on every container recreation.
+      - runner-work:/home/runner/actions-runner/_work
+
+volumes:
+  claude-config:
+  claude-data:
+  runner-work:
