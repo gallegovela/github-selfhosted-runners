@@ -7,15 +7,35 @@ concreto) para poder atender workflows de cualquier repo que lo necesite.
 
 ## Estructura
 
-Cada subcarpeta es un runner independiente, con su propio `Dockerfile` y
-`entrypoint.sh`:
+Un único `docker-compose.yml` en la raíz define todos los servicios
+(runners). Cada subcarpeta es un runner independiente, con su propio
+`Dockerfile` y `entrypoint.sh`, usado como build context por el servicio
+correspondiente:
 
 - `claude/` — runner para el workflow `.github/workflows/issue-pipeline.yml`
   (label `ionosL1`). Incluye `git`, `gh`, `ssh` y la CLI de `claude`.
 
 Al añadir un nuevo runner, se crea una carpeta nueva con su propio
 `Dockerfile`/`entrypoint.sh`, minimal para lo que ese workflow concreto
-necesita — no se comparte una imagen "todo incluido" entre runners.
+necesita — no se comparte una imagen "todo incluido" entre runners — y se
+añade su servicio a `docker-compose.yml`.
+
+## Configuración y arranque
+
+La configuración de todo el proyecto vive en un único `.env` en la raíz
+(copiar desde `.env.example`). Incluye, por cada servicio, sus variables
+propias (por ejemplo `GITHUB_ORG`, `RUNNER_NAME`... para `claude-runner`).
+
+Qué servicios arrancan se controla con `COMPOSE_PROFILES` en ese `.env`:
+cada servicio de `docker-compose.yml` está etiquetado con un `profiles:
+[...]`, y basta con incluir o quitar ese nombre de la lista para
+activarlo o dejarlo parado, sin tocar el propio `docker-compose.yml`.
+
+```
+docker compose up -d
+```
+
+levanta únicamente los servicios cuyo profile esté en `COMPOSE_PROFILES`.
 
 ## Registro contra la organización
 

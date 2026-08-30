@@ -1,6 +1,11 @@
 services:
   claude-runner:
-    build: .
+    # `profiles` gates whether this service starts on a plain
+    # `docker compose up`; toggle it via COMPOSE_PROFILES in .env
+    # (Compose reads that var from .env automatically -- no --profile
+    # flag needed on the CLI).
+    profiles: ["claude"]
+    build: ./claude
     image: gallegovela-github-selfhosted-runners/claude-runner:latest
     container_name: gh-runner-claude
     restart: unless-stopped
@@ -17,9 +22,9 @@ services:
       RUNNER_NAME: ${RUNNER_NAME:-claude-runner-1}
       RUNNER_LABELS: ${RUNNER_LABELS:-ionosL1}
     volumes:
-      # Secrets: never baked into the image (see Dockerfile).
-      - ./secrets/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
-      - ./secrets/id_ed25519:/home/runner/.ssh/id_ed25519:ro
+      # Secrets: never baked into the image (see claude/Dockerfile).
+      - ./claude/secrets/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      - ./claude/secrets/id_ed25519:/home/runner/.ssh/id_ed25519:ro
       # `claude` session (OAuth login is interactive, done once
       # after the first startup and must survive container
       # recreations).
