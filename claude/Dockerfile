@@ -59,6 +59,13 @@ RUN curl -fsSL -o actions-runner.tar.gz \
     && mkdir actions-runner && tar xzf actions-runner.tar.gz -C actions-runner \
     && rm actions-runner.tar.gz
 
+# Pre-create _work owned by runner, same reasoning as ~/.ssh above:
+# docker-compose.yml mounts the runner-work volume here, and an empty
+# named volume is populated from whatever's already at that path in
+# the image. Without this, Docker creates it as root on first mount
+# and the runner (uid 1001) can't write _tool/_temp/etc under it.
+RUN mkdir -p actions-runner/_work
+
 # installdependencies.sh needs root (apt-get); everything else in this
 # image runs as `runner`.
 USER root
