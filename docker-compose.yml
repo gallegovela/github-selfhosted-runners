@@ -22,9 +22,11 @@ services:
       RUNNER_NAME: ${RUNNER_NAME:-claude-runner-1}
       RUNNER_LABELS: ${RUNNER_LABELS:-ionosL1}
     volumes:
-      # Secrets: never baked into the image (see claude/Dockerfile).
-      - ./claude/secrets/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
-      - ./claude/secrets/id_ed25519:/home/runner/.ssh/id_ed25519:ro
+      # Secrets: never baked into the image (see claude/Dockerfile), and
+      # kept outside the repo checkout entirely -- SECRETS_DIR (set in
+      # .env) is a system path, one subfolder per runner service.
+      - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/claude/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/claude/id_ed25519:/home/runner/.ssh/id_ed25519:ro
       # `claude` session (OAuth login is interactive, done once
       # after the first startup and must survive container
       # recreations).

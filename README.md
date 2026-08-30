@@ -69,6 +69,22 @@ ejecución:
   `~/.local/share/claude`), que se inicia una vez de forma interactiva
   tras levantar el contenedor (el login OAuth no se puede scriptar).
 
+Los certificados y claves privadas de todos los runners viven fuera del
+repo, en una ruta del sistema: `SECRETS_DIR` (configurable en `.env`,
+por defecto `/etc/github-selfhosted-runners/secrets`), con un
+subdirectorio por servicio. Antes de levantar `claude-runner` hay que
+crear esa ruta en la máquina host y colocar ahí sus ficheros:
+
+```
+sudo mkdir -p /etc/github-selfhosted-runners/secrets/claude
+sudo chmod 700 /etc/github-selfhosted-runners/secrets /etc/github-selfhosted-runners/secrets/claude
+sudo cp github-app-private-key.pem /etc/github-selfhosted-runners/secrets/claude/
+sudo cp id_ed25519 /etc/github-selfhosted-runners/secrets/claude/
+```
+
+`docker-compose.yml` monta esos ficheros desde `$SECRETS_DIR/claude/`
+dentro del contenedor; no forman parte del repo ni del `.env`.
+
 ## TODO
 
 - Automatizar el despliegue de los contenedores en la VM (docker compose
