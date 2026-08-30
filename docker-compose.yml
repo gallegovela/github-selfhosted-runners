@@ -27,16 +27,9 @@ services:
       # .env) is a system path, one subfolder per runner service.
       - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/claude/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
       - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/claude/id_ed25519:/home/runner/.ssh/id_ed25519:ro
-      # `claude` session (OAuth login is interactive, done once
-      # after the first startup and must survive container
-      # recreations).
-      - claude-config:/home/runner/.claude
-      - claude-data:/home/runner/.local/share/claude
       # Runner work directory, so the tool/checkout cache isn't lost
       # on every container recreation.
       - runner-work:/home/runner/actions-runner/_work
 
 volumes:
-  claude-config:
-  claude-data:
   runner-work:

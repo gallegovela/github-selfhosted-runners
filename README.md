@@ -65,9 +65,13 @@ ejecución:
 
 - La clave privada de la GitHub App (`.pem`).
 - La clave SSH privada que usan los workflows para hacer `git push`.
-- La sesión/autenticación de `claude` (`~/.claude`,
-  `~/.local/share/claude`), que se inicia una vez de forma interactiva
-  tras levantar el contenedor (el login OAuth no se puede scriptar).
+
+`claude` no requiere ningún estado persistente en este runner: se
+autentica con `CLAUDE_CODE_OAUTH_TOKEN` (token de larga duración
+generado con `claude setup-token`), guardado como secreto de
+organización en GitHub y pasado como variable de entorno a nivel de
+workflow (no de este repo) en cada ejecución -- no hace falta login
+interactivo ni volumen para `~/.claude`.
 
 Los certificados y claves privadas de todos los runners viven fuera del
 repo, en una ruta del sistema: `SECRETS_DIR` (configurable en `.env`,

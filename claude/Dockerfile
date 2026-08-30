@@ -8,9 +8,13 @@
 #   - the SSH private key setup-ssh-and-git unlocks and pushes with
 #   - the GitHub App private key (.pem) the entrypoint uses to register
 #     this as an organization runner
-#   - claude's own auth/session data (~/.claude, ~/.local/share/claude)
-#     -- log in once interactively after the container is up; there's
-#     no way to script the OAuth browser flow from a Dockerfile
+#
+# claude itself authenticates via CLAUDE_CODE_OAUTH_TOKEN, set as a
+# workflow-level env var from the CLAUDE_CODE_OAUTH_TOKEN organization
+# secret (see issue-pipeline.yml in the repo that uses this runner) --
+# a long-lived token from `claude setup-token`, not an interactive
+# browser login, so no ~/.claude session needs to survive container
+# recreations.
 
 FROM ubuntu:24.04
 
