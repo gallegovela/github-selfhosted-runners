@@ -31,7 +31,7 @@ get_installation_token() {
   signature=$(printf '%s' "$unsigned" | openssl dgst -sha256 -sign "$GITHUB_APP_PRIVATE_KEY_PATH" | base64url)
   jwt="${unsigned}.${signature}"
 
-  curl -sf -X POST \
+  curl -sSf -X POST \
     -H "Authorization: Bearer $jwt" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens" \
@@ -41,7 +41,7 @@ get_installation_token() {
 register() {
   local installation_token reg_token
   installation_token=$(get_installation_token)
-  reg_token=$(curl -sf -X POST \
+  reg_token=$(curl -sSf -X POST \
     -H "Authorization: Bearer $installation_token" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/orgs/${GITHUB_ORG}/actions/runners/registration-token" \
@@ -59,7 +59,7 @@ register() {
 deregister() {
   local installation_token del_token
   installation_token=$(get_installation_token) || return 0
-  del_token=$(curl -sf -X POST \
+  del_token=$(curl -sSf -X POST \
     -H "Authorization: Bearer $installation_token" \
     -H "Accept: application/vnd.github+json" \
     "https://api.github.com/orgs/${GITHUB_ORG}/actions/runners/remove-token" \

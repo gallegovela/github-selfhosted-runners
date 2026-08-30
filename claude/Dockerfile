@@ -39,10 +39,19 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # The runner refuses to configure/run as root -- deliberately not
-# overriding that with RUNNER_ALLOW_RUNASROOT.
-RUN useradd -m -s /bin/bash runner
+# overriding that with RUNNER_ALLOW_RUNASROOT. uid/gid pinned (not left
+# to useradd's default) so the host secrets directory can be chowned to
+# a stable, known id -- see README's "Estado y secretos" section.
+RUN useradd -m -s /bin/bash -u 1001 -U runner
 USER runner
 WORKDIR /home/runner
+
+# Pre-create ~/.ssh owned by runner. docker-compose.yml bind-mounts
+# id_ed25519 into ~/.ssh/id_ed25519; if this directory doesn't already
+# exist in the image, Docker auto-creates it as root on mount, and the
+# entrypoint's `ssh-keyscan >> ~/.ssh/known_hosts` then fails with
+# "Permission denied" since runner can't write into a root-owned dir.
+RUN mkdir -m 700 ~/.ssh
 
 RUN curl -fsSL -o actions-runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \

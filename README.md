@@ -77,13 +77,23 @@ crear esa ruta en la máquina host y colocar ahí sus ficheros:
 
 ```
 sudo mkdir -p /etc/github-selfhosted-runners/secrets/claude
-sudo chmod 700 /etc/github-selfhosted-runners/secrets /etc/github-selfhosted-runners/secrets/claude
 sudo cp github-app-private-key.pem /etc/github-selfhosted-runners/secrets/claude/
 sudo cp id_ed25519 /etc/github-selfhosted-runners/secrets/claude/
+# El contenedor corre como `runner` (uid:gid 1001:1001, fijado en
+# claude/Dockerfile), no como root -- estos ficheros deben ser suyos,
+# no de root, o el runner no podrá leerlos pese al `:ro` del mount.
+sudo chown -R 1001:1001 /etc/github-selfhosted-runners/secrets/claude
+sudo chmod 700 /etc/github-selfhosted-runners/secrets /etc/github-selfhosted-runners/secrets/claude
+sudo chmod 600 /etc/github-selfhosted-runners/secrets/claude/*
 ```
 
 `docker-compose.yml` monta esos ficheros desde `$SECRETS_DIR/claude/`
 dentro del contenedor; no forman parte del repo ni del `.env`.
+
+`id_ed25519` debe ser una clave dedicada a este runner (deploy key),
+no una clave personal ni la de `root` del host -- un símlink a
+`/root/.ssh/id_ed25519`, por ejemplo, mezclaría la identidad del
+runner con la del administrador de la máquina.
 
 ## TODO
 
