@@ -1,0 +1,46 @@
+name: Setup SSH agent and git identity
+description: >
+  Unlocks the runner's own SSH key (already on disk -- this is meant
+  for the persistent self-hosted runner, not an ephemeral GitHub-hosted
+  one) and points origin at the SSH remote, so a later `git push`
+  works unattended. Best-effort: the exact ssh-agent/SSH_ASKPASS
+  sequence hasn't been verified against the runner's actual OpenSSH
+  version.
+
+inputs:
+  ssh-key-passphrase:
+    required: true
+  ssh-key-path:
+    required: false
+    default: ~/.ssh/id_ed25519
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SSH_KEY_PASSPHRASE: ${{ inputs.ssh-key-passphrase }}
+        SSH_KEY_PATH: ${{ inputs.ssh-key-path }}
+      run: |
+        # Bash doesn't expand ~ coming from a variable's value (only when
+        # typed literally on the command line), so the default
+        # ~/.ssh/id_ed25519 needs expanding by hand here.
+        SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+
+        eval "$(ssh-agent -s)"
+        echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+        echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+        # printf, not a heredoc: a heredoc body nested inside this YAML
+        # block scalar would inherit its indentation as literal spaces,
+        # and a shebang isn't recognized with leading whitespace.
+        ASKPASS_SCRIPT="$(mktemp)"
+        printf '#!/bin/sh\necho "$SSH_KEY_PASSPHRASE"\n' > "$ASKPASS_SCRIPT"
+        chmod +x "$ASKPASS_SCRIPT"
+
+        SSH_ASKPASS="$ASKPASS_SCRIPT" SSH_ASKPASS_REQUIRE=force setsid ssh-add "$SSH_KEY_PATH" < /dev/null
+        rm -f "$ASKPASS_SCRIPT"
+
+        git remote set-url origin "git@github.com:${GITHUB_REPOSITORY}.git"
+        git config user.name "Claude (automated)"
+        git config user.email "noreply@anthropic.com"
