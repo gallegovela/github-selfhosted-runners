@@ -141,7 +141,7 @@ jobs:
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          PROMPT="Review CLAUDE.md in full before anything else. You are on branch issue-$ISSUE_NUMBER, which already has the spec/ changes for issue #$ISSUE_NUMBER applied. Re-read the issue and its entire thread (gh issue view $ISSUE_NUMBER --comments). Your only responsibility in this stage is to implement the code that fulfills that spec, following the order set in CLAUDE.md (db -> ingest -> backend -> frontend, as applicable to the change). When done, commit and push branch issue-$ISSUE_NUMBER. Reply in the same language the issue and its comments are written in."
+          PROMPT="Review CLAUDE.md in full before anything else. You are on branch issue-$ISSUE_NUMBER, which already has the spec/ changes for issue #$ISSUE_NUMBER applied. Re-read the issue and its entire thread (gh issue view $ISSUE_NUMBER --comments). Your only responsibility in this stage is to implement the code that fulfills that spec, following the conventions in CLAUDE.md. When done, commit and push branch issue-$ISSUE_NUMBER. Reply in the same language the issue and its comments are written in."
           claude -p "$PROMPT" \
             --dangerously-skip-permissions \
             --allowedTools "Read Write Edit Grep Glob Bash(git *) Bash(gh issue view:*)" \
