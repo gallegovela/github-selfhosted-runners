@@ -31,5 +31,48 @@ services:
       # on every container recreation.
       - runner-work:/home/runner/actions-runner/_work
 
+  deploy-docker-runner:
+    profiles: ["deploy-docker"]
+    build:
+      context: ./deploy-docker
+      args:
+        # GID of the host's `docker` group, so the container's `runner`
+        # user can use /var/run/docker.sock below -- varies per host,
+        # see spec/runner-deploy-docker.md.
+        DOCKER_GID: ${DOCKER_GID:-999}
+    image: gallegovela-github-selfhosted-runners/deploy-docker-runner:latest
+    container_name: gh-runner-deploy-docker
+    restart: unless-stopped
+    # Same reasoning as claude-runner: the entrypoint's deregister chain
+    # (JWT -> installation token -> remove-token) needs more time than
+    # Compose's default 10s grace period.
+    stop_grace_period: 30s
+    environment:
+      # Same GitHub App as claude-runner (one App installed once on the
+      # org) -- only the runner identity below is specific to this
+      # service.
+      GITHUB_ORG: ${GITHUB_ORG:?GITHUB_ORG is required}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?GITHUB_APP_ID is required}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:?GITHUB_APP_INSTALLATION_ID is required}
+      GITHUB_APP_PRIVATE_KEY_PATH: /home/runner/secrets/github-app-private-key.pem
+      RUNNER_NAME: ${DEPLOY_DOCKER_RUNNER_NAME:-deploy-docker-runner-1}
+      RUNNER_LABELS: ${DEPLOY_DOCKER_RUNNER_LABELS:-deployDocker}
+    volumes:
+      # Same private key file as claude-runner (see above).
+      - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      # Docker-outside-of-Docker: gives this runner control of the
+      # host's own dockerd, so containers it deploys survive its own
+      # lifecycle. Root-equivalent access to the host -- a conscious,
+      # documented deviation from this project's secrets philosophy,
+      # see spec/runner-deploy-docker.md.
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      # 1:1 bind mount (same path inside and outside the container) so
+      # that relative bind mounts in a deployed app's own compose file
+      # resolve correctly against the host dockerd -- see
+      # spec/runner-deploy-docker.md.
+      - ${DEPLOY_DIR:?DEPLOY_DIR is required}:${DEPLOY_DIR:?DEPLOY_DIR is required}
+      - runner-work-deploy-docker:/home/runner/actions-runner/_work
+
 volumes:
   runner-work:
+  runner-work-deploy-docker:
