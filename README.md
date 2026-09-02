@@ -44,6 +44,13 @@ correspondiente:
   [`.github/workflows/issue-pipeline.yml`](.github/workflows/issue-pipeline.yml)
   (label `ionosL1`). Incluye `git`, `gh`, `ssh` y la CLI de `claude`.
   Detalle completo en [`spec/runner-claude.md`](spec/runner-claude.md).
+- [`deploy-docker/`](deploy-docker/) — runner genérico de despliegue
+  (label `deployDocker`), consumido por los pipelines de otras apps de
+  la organización, no por ningún workflow de este repo. Incluye el
+  cliente `docker` (con acceso al `dockerd` del host vía socket
+  montado, Docker-outside-of-Docker) pero no decide qué se despliega.
+  Detalle completo en
+  [`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md).
 
 Al añadir un runner nuevo se crean tres cosas a la vez: la carpeta con su
 `Dockerfile`/`entrypoint.sh` (minimal para lo que ese workflow concreto
@@ -115,9 +122,12 @@ interactivo ni volumen para `~/.claude`.
 
 Los certificados y claves privadas de todos los runners viven fuera del
 repo, en una ruta del sistema: `SECRETS_DIR` (configurable en `.env`,
-por defecto `/etc/github-selfhosted-runners/secrets`). Antes de levantar
-`claude-runner` hay que crear esa ruta en la máquina host y colocar ahí
-sus ficheros:
+por defecto `/etc/github-selfhosted-runners/secrets`). Todos los runners
+de este repo se registran con la misma GitHub App (una única instalación
+a nivel de organización), así que comparten el mismo
+`github-app-private-key.pem` -- no hace falta un fichero por runner.
+Antes de levantar `claude-runner` hay que crear esa ruta en la máquina
+host y colocar ahí sus ficheros:
 
 ```
 sudo mkdir -p /etc/github-selfhosted-runners/secrets
@@ -139,7 +149,15 @@ dentro del contenedor; no forman parte del repo ni del `.env`.
 `id_ed25519` debe ser una clave dedicada a este runner (deploy key),
 no una clave personal ni la de `root` del host -- un símlink a
 `/root/.ssh/id_ed25519`, por ejemplo, mezclaría la identidad del
-runner con la del administrador de la máquina.
+runner con la del administrador de la máquina. Solo lo usa
+`claude-runner`; `deploy-docker-runner` no la monta (ver más abajo).
+
+`deploy-docker-runner` añade estado propio, fuera del patrón anterior de
+"solo secretos de solo lectura": monta `/var/run/docker.sock` del host
+(`:rw`, Docker-outside-of-Docker) y hace bind mount 1:1 de `DEPLOY_DIR`
+(variable de `.env`, ruta del host fuera del repo). Es una decisión de
+diseño consciente, documentada en detalle en
+[`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md).
 
 ## Pipeline de issues dirigida por labels
 
