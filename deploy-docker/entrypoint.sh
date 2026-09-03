@@ -80,6 +80,15 @@ deregister() {
   ./config.sh remove --token "$del_token" || true
 }
 
+
+# github.com's known host key, added on every start rather than
+# assumed present -- this is a fresh image, not a persistent bare-metal
+# box. Needed so a `git clone` over SSH during the actual deploy step
+# (e.g. private submodules/deps, see spec/runner-deploy-docker.md)
+# doesn't hang on an interactive host-key prompt.
+mkdir -p ~/.ssh
+ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
+
 trap deregister EXIT INT TERM
 
 register

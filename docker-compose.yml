@@ -60,6 +60,10 @@ services:
     volumes:
       # Same private key file as claude-runner (see above).
       - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      # Same SSH key as claude-runner too (see spec/runner-deploy-docker.md):
+      # lets a deploy step clone other private repos the ephemeral
+      # actions/checkout token doesn't cover.
+      - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/id_ed25519:/home/runner/.ssh/id_ed25519:ro
       # Docker-outside-of-Docker: gives this runner control of the
       # host's own dockerd, so containers it deploys survive its own
       # lifecycle. Root-equivalent access to the host -- a conscious,

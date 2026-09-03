@@ -76,11 +76,18 @@ Al recibir `SIGTERM`/`SIGINT`, se desregistra (JWT -> installation token
 la API de GitHub necesita más tiempo que el grace period por defecto de
 Compose).
 
-No necesita clave SSH propia: a diferencia de `claude` (que hace `git
-push` fuera del flujo estándar de Actions, en la pipeline de issues de
-este mismo repo), el checkout de cada app lo hace el workflow consumidor
-con `actions/checkout` y el token efímero estándar de esa ejecución. Por
-eso este runner no monta `id_ed25519` (ver "Secretos y volúmenes").
+Sí necesita la clave SSH privada, la misma clave dedicada que ya monta
+`claude` (`SECRETS_DIR/id_ed25519`): el checkout de la app desplegada en
+sí lo sigue haciendo el workflow consumidor con `actions/checkout` y su
+token efímero estándar, pero el propio paso de deploy dentro de ese
+workflow puede necesitar clonar otros repos privados de la organización
+(submódulos, dependencias internas) que ese token efímero no cubre --
+de ahí que este runner monte la misma clave que `claude` en vez de
+prescindir de ella (ver "Secretos y volúmenes"). Por el mismo motivo,
+el entrypoint añade la clave de host de `github.com` a `known_hosts`
+con `ssh-keyscan` en cada arranque, igual que `claude/entrypoint.sh` --
+si no, un `git clone` por SSH durante el propio paso de deploy se
+quedaría colgado en el prompt interactivo de verificación de host.
 
 ## Variables de entorno
 
@@ -111,6 +118,11 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
 - `github-app-private-key.pem`, montado desde `$SECRETS_DIR` igual que
   en `claude-runner` (`:ro`), propiedad del uid:gid del usuario `runner`
   de este runner en el host.
+- `id_ed25519`, montado desde `$SECRETS_DIR` igual que en
+  `claude-runner` (`:ro`) -- **es la misma clave dedicada, no una copia
+  distinta**: ambos runners comparten uid:gid 1001:1001 en el host, así
+  que no hay problema de permisos por reusarla. Ver "Registro y baja"
+  para el motivo (clonar repos privados adicionales durante el deploy).
 - **`/var/run/docker.sock` del host, montado `:rw`.** Esta es una
   **decisión de diseño consciente**, no un volumen más: un socket Docker
   da control root-equivalente sobre el host (cualquier proceso que pueda
@@ -138,8 +150,6 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
   (`DEPLOY_DIR/<proyecto>`), con los ficheros de configuración/datos
   persistentes de esa app, conocido por convención de nombre por su
   propio pipeline consumidor.
-
-No monta `id_ed25519`: ver "Registro y baja".
 
 ## Decisión de diseño: Docker-outside-of-Docker y flujo de despliegue
 

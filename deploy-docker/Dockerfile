@@ -9,6 +9,9 @@
 # State that must come in as a volume, never baked into this image:
 #   - the GitHub App private key (.pem) the entrypoint uses to register
 #     this as an organization runner (same App as claude-runner)
+#   - the SSH private key (same id_ed25519 as claude-runner) a deploy
+#     step may use to clone other private repos, see
+#     spec/runner-deploy-docker.md
 #   - /var/run/docker.sock (host) -- Docker-outside-of-Docker, see
 #     spec/runner-deploy-docker.md
 #   - DEPLOY_DIR, bind-mounted 1:1 (same path inside and outside the
@@ -66,6 +69,14 @@ WORKDIR /home/runner
 # concretas porque DEPLOY_DIR/<proyecto> es dinámico, un subdirectorio por
 # app desplegada; ver spec/runner-deploy-docker.md (issue #3).
 RUN git config --global --add safe.directory '*'
+
+# Pre-create ~/.ssh owned by runner. docker-compose.yml bind-mounts
+# id_ed25519 into ~/.ssh/id_ed25519 (same key as claude-runner, see
+# spec/runner-deploy-docker.md); if this directory doesn't already
+# exist in the image, Docker auto-creates it as root on mount, and the
+# entrypoint's `ssh-keyscan >> ~/.ssh/known_hosts` then fails with
+# "Permission denied" since runner can't write into a root-owned dir.
+RUN mkdir -m 700 ~/.ssh
 
 RUN curl -fsSL -o actions-runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
