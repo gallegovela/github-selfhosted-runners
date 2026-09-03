@@ -59,6 +59,14 @@ RUN groupadd -g "${DOCKER_GID}" docker \
 USER runner
 WORKDIR /home/runner
 
+# Workflows consumidores hacen git clone/pull dentro de DEPLOY_DIR/<proyecto>
+# (bind mount 1:1 desde el host), cuyo propietario en el host no siempre
+# coincide con el uid 1001 de `runner` -- sin esto, git rechaza operar ahí
+# ("dubious ownership", detectado desde Git 2.35.2). Comodín en vez de rutas
+# concretas porque DEPLOY_DIR/<proyecto> es dinámico, un subdirectorio por
+# app desplegada; ver spec/runner-deploy-docker.md (issue #3).
+RUN git config --global --add safe.directory '*'
+
 RUN curl -fsSL -o actions-runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
     && echo "${RUNNER_SHA256}  actions-runner.tar.gz" | sha256sum -c - \
