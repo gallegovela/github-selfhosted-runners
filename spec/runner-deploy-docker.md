@@ -48,6 +48,12 @@ concreta.
   Docker los cree como root al montarlos).
 - `installdependencies.sh` del runner de Actions corre como root
   (necesita `apt-get`); todo lo demás corre como `runner`.
+- La imagen configura `git config --global --add safe.directory '*'`
+  para el usuario `runner`, para que el `git clone`/`git pull` que hacen
+  los workflows consumidores dentro de `DEPLOY_DIR/<proyecto>` no falle
+  por "dubious ownership" cuando el propietario en el host de esa ruta no
+  coincide con el uid de `runner` en el contenedor (ver "Decisión de
+  diseño" más abajo).
 
 ## Registro y baja como runner de organización (`deploy-docker/entrypoint.sh`)
 
@@ -178,10 +184,26 @@ No monta `id_ed25519`: ver "Registro y baja".
   `docker-compose.yml`, pero cada pipeline consumidor debe nombrar sus
   servicios/redes evitando colisión con los del runner.
 
+- **`safe.directory` con comodín (`'*'`), no rutas concretas**:
+  `DEPLOY_DIR/<proyecto>` es dinámico (un subdirectorio por app
+  desplegada, con nombre decidido por cada pipeline consumidor), así que
+  no hay una lista fija de rutas que registrar una a una en
+  `safe.directory` -- de ahí el comodín en vez de una entrada por
+  proyecto. Es una ampliación de superficie menor comparada con el
+  riesgo ya asumido y documentado del socket Docker montado `:rw`
+  (acceso root-equivalente al host): confiar en cualquier directorio para
+  operaciones `git` es un riesgo bajo en comparación. Esta configuración
+  es solo para el usuario `runner` de *este* contenedor, no afecta a
+  `claude-runner` ni a ningún otro runner.
+
 ## Referencia cruzada
 
 - Origen: issue #1 ("Nuevo runner para despliegue"), hilo completo de
   decisiones de diseño (DooD, `DEPLOY_DIR` 1:1, dirección del copiado).
+  Issue #3 ("Error en action que usa el runner deploy-docker"): fallo
+  "dubious ownership" de git en `DEPLOY_DIR/<proyecto>` por desajuste de
+  propietario entre el host y el uid de `runner`, resuelto con
+  `safe.directory '*'`.
 - Convenciones generales de runners: `CLAUDE.md`.
 - Runner de referencia para estructura de imagen/registro:
   `spec/runner-claude.md`.
