@@ -27,8 +27,7 @@ concreta.
 ## Imagen (`deploy-docker/Dockerfile`)
 
 - Base: `ubuntu:24.04` (igual que `claude/`).
-- Paquetes base: `ca-certificates`, `curl`, `git`, `openssl`,
-  `openssh-client`.
+- Paquetes base: `ca-certificates`, `curl`, `git`, `openssl`.
 - CLI `docker` + plugin `compose`, instalados desde el repositorio APT
   oficial de Docker. **Sin `dockerd` propio** -- ver "Docker-outside-of-
   Docker" más abajo. Sin `gh`, salvo que algún workflow consumidor lo
@@ -43,9 +42,14 @@ concreta.
   montado (ver más abajo) -- el gid de ese grupo varía entre hosts, así
   que se fija en build time vía `ARG`/variable de entorno
   (`DOCKER_GID` o similar), no hardcodeado.
-- `~/.ssh` y `actions-runner/_work` se pre-crean en la imagen, propiedad
-  de `runner`, por el mismo motivo que en `claude/Dockerfile` (evitar que
-  Docker los cree como root al montarlos).
+- `actions-runner/_work` se pre-crea en la imagen, propiedad de
+  `runner`, por el mismo motivo que en `claude/Dockerfile` (evitar que
+  Docker lo cree como root al montarlo).
+- `get-installation-token.sh` (ver "Registro y baja" más abajo) se copia
+  a `/home/runner/bin` y se añade al `PATH` -- además de usarlo el
+  propio `entrypoint.sh` para registrarse, queda disponible para que
+  cualquier step de un workflow consumidor que corra en este runner lo
+  invoque directamente.
 - `installdependencies.sh` del runner de Actions corre como root
   (necesita `apt-get`); todo lo demás corre como `runner`.
 - La imagen configura `git config --global --add safe.directory '*'`
@@ -81,14 +85,16 @@ sigue haciendo el workflow consumidor con `actions/checkout` y su token
 efímero estándar, pero el propio paso de deploy dentro de ese workflow
 puede necesitar clonar otros repos privados de la organización
 (submódulos, dependencias internas) que ese token efímero no cubre --
-para eso, este runner obtiene bajo demanda un installation access token
-de la misma GitHub App compartida que ya usa para registrarse
-(`GITHUB_APP_ID` + `GITHUB_APP_INSTALLATION_ID` +
-`GITHUB_APP_PRIVATE_KEY_PATH`, ya montados; el mismo mecanismo JWT ->
-installation token de los pasos 1-2 de más arriba, sin ningún secreto
-nuevo), y lo usa para clonar por HTTPS
-(`https://x-access-token:<token>@github.com/...`). Precondición
-operativa: si la instalación de la GitHub App está limitada a
+para eso, `get-installation-token.sh` (`/home/runner/bin`, en el `PATH`)
+obtiene bajo demanda un installation access token de la misma GitHub App
+compartida que ya usa para registrarse (`GITHUB_APP_ID` +
+`GITHUB_APP_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY_PATH`, ya
+montados; el mismo mecanismo JWT -> installation token de los pasos 1-2
+de más arriba, extraído a un script propio en vez de duplicado inline,
+sin ningún secreto nuevo). Un step de un workflow consumidor lo invoca
+directamente para clonar por HTTPS
+(`git clone https://x-access-token:$(get-installation-token.sh)@github.com/...`).
+Precondición operativa: si la instalación de la GitHub App está limitada a
 "selected repositories", hay que añadir a esa lista los repos
 adicionales que el deploy necesite clonar; si está instalada a nivel de
 organización completa, no hace falta nada.
@@ -218,9 +224,9 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
   mismo mecanismo JWT -> installation token del registro) sin añadir
   ningún secreto nuevo, frente a una clave SSH estática compartida entre
   runners. Al dejar de necesitarse SSH en ningún runner de este repo,
-  también permite retirar `openssh-client` y la pre-creación de
-  `~/.ssh`/`ssh-keyscan` de ambas imágenes (cambio de código, pendiente
-  de una etapa `implementation`).
+  también permitió retirar `openssh-client` y la pre-creación de
+  `~/.ssh`/`ssh-keyscan` de ambas imágenes, y el volumen `id_ed25519` de
+  `docker-compose.yml`.
 
 - **`safe.directory` con comodín (`'*'`), no rutas concretas**:
   `DEPLOY_DIR/<proyecto>` es dinámico (un subdirectorio por app

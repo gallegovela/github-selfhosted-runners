@@ -42,7 +42,7 @@ correspondiente:
 
 - [`claude/`](claude/) — runner para el workflow
   [`.github/workflows/issue-pipeline.yml`](.github/workflows/issue-pipeline.yml)
-  (label `ionosL1`). Incluye `git`, `gh`, `ssh` y la CLI de `claude`.
+  (label `ionosL1`). Incluye `git`, `gh` y la CLI de `claude`.
   Detalle completo en [`spec/runner-claude.md`](spec/runner-claude.md).
 - [`deploy-docker/`](deploy-docker/) — runner genérico de despliegue
   (label `deployDocker`), consumido por los pipelines de otras apps de

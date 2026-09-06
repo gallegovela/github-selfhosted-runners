@@ -87,12 +87,19 @@ jobs:
     needs: check-permission
     if: needs.check-permission.outputs.allowed == 'true' && ((github.event_name == 'issues' && github.event.label.name == 'preparation') || (github.event_name == 'issue_comment' && contains(github.event.issue.labels.*.name, 'preparation')))
     runs-on: ionos-l1-claude
+    # Scoped to this job (not the whole workflow): needed for the
+    # `git push` below, done by actions/checkout's own persisted
+    # credentials (its ephemeral GITHUB_TOKEN), not an SSH deploy key.
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v6
 
-      - uses: ./.github/actions/setup-ssh-and-git
-        with:
-          ssh-key-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+      - name: Configure git identity
+        run: |
+          git config user.name "Claude (automated)"
+          git config user.email "noreply@anthropic.com"
 
       - name: Create or reuse the issue branch
         env:
@@ -128,14 +135,21 @@ jobs:
     needs: check-permission
     if: needs.check-permission.outputs.allowed == 'true' && ((github.event_name == 'issues' && github.event.label.name == 'implementation') || (github.event_name == 'issue_comment' && contains(github.event.issue.labels.*.name, 'implementation')))
     runs-on: ionos-l1-claude
+    # Scoped to this job (not the whole workflow): needed for the
+    # `git push` below, done by actions/checkout's own persisted
+    # credentials (its ephemeral GITHUB_TOKEN), not an SSH deploy key.
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: issue-${{ github.event.issue.number }}
 
-      - uses: ./.github/actions/setup-ssh-and-git
-        with:
-          ssh-key-passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+      - name: Configure git identity
+        run: |
+          git config user.name "Claude (automated)"
+          git config user.email "noreply@anthropic.com"
 
       - name: Run Claude
         env:

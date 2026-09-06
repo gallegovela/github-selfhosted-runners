@@ -1,11 +1,10 @@
 # Self-hosted GitHub Actions runner image for .github/workflows/issue-pipeline.yml
 # (runs-on: ionosL1). Minimal on purpose -- decided: only what that
-# workflow's own steps need (git, gh, ssh, claude); not this repo's own
+# workflow's own steps need (git, gh, claude); not this repo's own
 # toolchain (Python/Node/Docker). If a pipeline stage ever needs those
 # to actually build/test weather-ingest, add them then, not preemptively.
 #
 # State that must come in as a volume, never baked into this image:
-#   - the SSH private key setup-ssh-and-git unlocks and pushes with
 #   - the GitHub App private key (.pem) the entrypoint uses to register
 #     this as an organization runner
 #
@@ -28,7 +27,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       git \
       jq \
       openssl \
-      openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI from its own official apt repo (the Ubuntu-bundled gh
@@ -50,24 +48,17 @@ RUN useradd -m -s /bin/bash -u 1001 -U runner
 USER runner
 WORKDIR /home/runner
 
-# Pre-create ~/.ssh owned by runner. docker-compose.yml bind-mounts
-# id_ed25519 into ~/.ssh/id_ed25519; if this directory doesn't already
-# exist in the image, Docker auto-creates it as root on mount, and the
-# entrypoint's `ssh-keyscan >> ~/.ssh/known_hosts` then fails with
-# "Permission denied" since runner can't write into a root-owned dir.
-RUN mkdir -m 700 ~/.ssh
-
 RUN curl -fsSL -o actions-runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
     && echo "${RUNNER_SHA256}  actions-runner.tar.gz" | sha256sum -c - \
     && mkdir actions-runner && tar xzf actions-runner.tar.gz -C actions-runner \
     && rm actions-runner.tar.gz
 
-# Pre-create _work owned by runner, same reasoning as ~/.ssh above:
-# docker-compose.yml mounts the runner-work volume here, and an empty
-# named volume is populated from whatever's already at that path in
-# the image. Without this, Docker creates it as root on first mount
-# and the runner (uid 1001) can't write _tool/_temp/etc under it.
+# Pre-create _work owned by runner: docker-compose.yml mounts the
+# runner-work volume here, and an empty named volume is populated from
+# whatever's already at that path in the image. Without this, Docker
+# creates it as root on first mount and the runner (uid 1001) can't
+# write _tool/_temp/etc under it.
 RUN mkdir -p actions-runner/_work
 
 # installdependencies.sh needs root (apt-get); everything else in this

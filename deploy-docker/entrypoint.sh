@@ -5,10 +5,17 @@
 # might restart later) and runs it. Deregisters on SIGTERM/SIGINT so
 # `docker stop` doesn't leave a stale/offline runner listed in the org.
 #
+# The JWT -> installation-token step is delegated to
+# get-installation-token.sh (same image, on PATH) -- extracted out so
+# consumer workflow steps running on this runner can call it directly
+# too, to clone other private repos over HTTPS during a deploy, see
+# spec/runner-deploy-docker.md.
+#
 # No `jq` in this image (deliberately -- see spec/runner-deploy-docker.md,
-# this runner only installs what it needs beyond the docker CLI), so JSON
-# responses are picked apart with grep/sed instead. Every value this
-# script needs is a flat top-level string field, so that's enough.
+# this runner only installs what it needs beyond the docker CLI), so the
+# registration-token/remove-token responses below are picked apart with
+# grep/sed instead. Every value this script needs is a flat top-level
+# string field, so that's enough.
 #
 # Best-effort: this JWT->installation-token->registration-token chain
 # mirrors claude/entrypoint.sh, built from GitHub's documented REST API
@@ -22,10 +29,6 @@ set -euo pipefail
 : "${GITHUB_APP_INSTALLATION_ID:?GITHUB_APP_INSTALLATION_ID is required}"
 : "${GITHUB_APP_PRIVATE_KEY_PATH:?GITHUB_APP_PRIVATE_KEY_PATH is required (mount the GitHub App private key here)}"
 
-base64url() {
-  base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'
-}
-
 # Extracts a flat top-level string field from a single-line JSON
 # response, e.g. json_field token <<< '{"token":"abc","expires_at":"..."}'
 json_field() {
@@ -33,21 +36,7 @@ json_field() {
 }
 
 get_installation_token() {
-  local now iat exp header payload unsigned signature jwt
-  now=$(date +%s)
-  iat=$((now - 60))
-  exp=$((now + 300))
-  header=$(printf '{"alg":"RS256","typ":"JWT"}' | base64url)
-  payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$GITHUB_APP_ID" | base64url)
-  unsigned="${header}.${payload}"
-  signature=$(printf '%s' "$unsigned" | openssl dgst -sha256 -sign "$GITHUB_APP_PRIVATE_KEY_PATH" | base64url)
-  jwt="${unsigned}.${signature}"
-
-  curl -sSf -X POST \
-    -H "Authorization: Bearer $jwt" \
-    -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens" \
-    | json_field token
+  get-installation-token.sh
 }
 
 register() {
@@ -79,15 +68,6 @@ deregister() {
   cd /home/runner/actions-runner
   ./config.sh remove --token "$del_token" || true
 }
-
-
-# github.com's known host key, added on every start rather than
-# assumed present -- this is a fresh image, not a persistent bare-metal
-# box. Needed so a `git clone` over SSH during the actual deploy step
-# (e.g. private submodules/deps, see spec/runner-deploy-docker.md)
-# doesn't hang on an interactive host-key prompt.
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
 
 trap deregister EXIT INT TERM
 

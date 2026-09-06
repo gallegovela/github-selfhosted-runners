@@ -8,10 +8,9 @@
 #
 # State that must come in as a volume, never baked into this image:
 #   - the GitHub App private key (.pem) the entrypoint uses to register
-#     this as an organization runner (same App as claude-runner)
-#   - the SSH private key (same id_ed25519 as claude-runner) a deploy
-#     step may use to clone other private repos, see
-#     spec/runner-deploy-docker.md
+#     this as an organization runner (same App as claude-runner), and
+#     that get-installation-token.sh (below) reuses on demand to clone
+#     other private repos during a deploy, see spec/runner-deploy-docker.md
 #   - /var/run/docker.sock (host) -- Docker-outside-of-Docker, see
 #     spec/runner-deploy-docker.md
 #   - DEPLOY_DIR, bind-mounted 1:1 (same path inside and outside the
@@ -34,7 +33,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       git \
       openssl \
-      openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # docker CLI + compose plugin from Docker's own official apt repo.
@@ -70,14 +68,6 @@ WORKDIR /home/runner
 # app desplegada; ver spec/runner-deploy-docker.md (issue #3).
 RUN git config --global --add safe.directory '*'
 
-# Pre-create ~/.ssh owned by runner. docker-compose.yml bind-mounts
-# id_ed25519 into ~/.ssh/id_ed25519 (same key as claude-runner, see
-# spec/runner-deploy-docker.md); if this directory doesn't already
-# exist in the image, Docker auto-creates it as root on mount, and the
-# entrypoint's `ssh-keyscan >> ~/.ssh/known_hosts` then fails with
-# "Permission denied" since runner can't write into a root-owned dir.
-RUN mkdir -m 700 ~/.ssh
-
 RUN curl -fsSL -o actions-runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
     && echo "${RUNNER_SHA256}  actions-runner.tar.gz" | sha256sum -c - \
@@ -100,5 +90,13 @@ USER runner
 
 COPY --chown=runner:runner entrypoint.sh /home/runner/entrypoint.sh
 RUN chmod +x /home/runner/entrypoint.sh
+
+# Standalone helper, reused by entrypoint.sh's own registration flow and
+# also directly callable from consumer workflow steps running on this
+# runner, to clone other private repos over HTTPS during a deploy --
+# see spec/runner-deploy-docker.md.
+COPY --chown=runner:runner get-installation-token.sh /home/runner/bin/get-installation-token.sh
+RUN chmod +x /home/runner/bin/get-installation-token.sh
+ENV PATH="/home/runner/bin:${PATH}"
 
 ENTRYPOINT ["/home/runner/entrypoint.sh"]
