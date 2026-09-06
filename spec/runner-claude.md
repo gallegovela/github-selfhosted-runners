@@ -118,12 +118,17 @@ tiempo de ejecución, desde `$SECRETS_DIR` (ruta del host, fuera del
 repo, default `/etc/github-selfhosted-runners/secrets`):
 
 - `github-app-private-key.pem` -> `/home/runner/secrets/github-app-private-key.pem` (`:ro`)
-- `id_ed25519` -> `/home/runner/.ssh/id_ed25519` (`:ro`)
 
-Ambos ficheros deben ser propiedad de uid:gid `1001:1001` (el usuario
-`runner` fijado en el Dockerfile) en el host, o el contenedor no podrá
-leerlos pese al `:ro`. `id_ed25519` debe ser una clave dedicada a este
-runner (deploy key), no una clave personal ni la de `root` del host.
+Debe ser propiedad de uid:gid `1001:1001` (el usuario `runner` fijado en
+el Dockerfile) en el host, o el contenedor no podrá leerlo pese al
+`:ro`.
+
+Este runner no monta ninguna clave SSH: las etapas `preparation` e
+`implementation` de la pipeline de issues (las únicas que hacen `git
+push`) lo hacen por HTTPS con el `GITHUB_TOKEN` efímero del propio job
+de `issue-pipeline.yml` (`permissions: contents: write`, scopeado a
+esas dos etapas), no con una deploy key estática -- ver "Pipeline de
+issues dirigida por labels" en `CLAUDE.md`.
 
 Además, un volumen nombrado `runner-work` se monta en
 `actions-runner/_work`, para que la caché de checkout/tools no se pierda
@@ -132,7 +137,5 @@ en cada recreación del contenedor.
 ## Referencia cruzada
 
 - Workflow que consume este runner: `.github/workflows/issue-pipeline.yml`.
-- Composite action usada por sus etapas `preparation`/`implementation`:
-  `.github/actions/setup-ssh-and-git/action.yml`.
 - Convenciones generales de runners y de la pipeline de issues:
   `CLAUDE.md`.

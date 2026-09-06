@@ -110,9 +110,9 @@ duración generado con `claude setup-token`), inyectado a nivel de
 workflow -- no hace falta login interactivo en el runner.
 
 Las etapas que necesitan `git push` (`preparation`, `implementation`)
-usan la composite action `.github/actions/setup-ssh-and-git`, que
-desbloquea la clave SSH ya presente en el runner y configura `origin`
-para pushear por SSH.
+lo hacen por HTTPS con el `GITHUB_TOKEN` efímero del propio job
+(`permissions: contents: write`, scopeado a esas dos etapas) -- no con
+una clave SSH estática.
 
 ## Filosofía de secretos y estado
 
