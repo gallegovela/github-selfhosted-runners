@@ -13,7 +13,7 @@ label `ionosL1`, y los jobs de esa pipeline lo reclaman con
 `runs-on: ionos-l1-claude`.
 
 Es deliberadamente minimal: solo lleva lo que esa pipeline necesita
-(`git`, `gh`, `ssh`, la CLI de `claude`), no el toolchain propio de
+(`git`, `gh`, la CLI de `claude`), no el toolchain propio de
 ningún proyecto consumidor (Python/Node/Docker...). Si una etapa futura
 necesitara compilar o testear el código de un repo concreto, esas
 herramientas se añadirían a este Dockerfile entonces, no de forma
@@ -22,8 +22,7 @@ preventiva.
 ## Imagen (`claude/Dockerfile`)
 
 - Base: `ubuntu:24.04`.
-- Paquetes base: `ca-certificates`, `curl`, `git`, `jq`, `openssl`,
-  `openssh-client`.
+- Paquetes base: `ca-certificates`, `curl`, `git`, `jq`, `openssl`.
 - `gh` (GitHub CLI) instalado desde el repositorio APT oficial de
   `cli.github.com`, no el paquete empaquetado por Ubuntu -- el workflow
   depende de comportamiento reciente de `gh` que el paquete de Ubuntu no
@@ -40,12 +39,10 @@ preventiva.
   **fijados a 1001:1001** (no el valor por defecto de `useradd`) para que
   el directorio de secretos del host pueda chown-earse a un id estable y
   conocido (ver `README.md`, sección "Estado y secretos").
-- `~/.ssh` y `actions-runner/_work` se pre-crean en la imagen, propiedad
-  de `runner`, antes de que Docker los monte como volumen/bind mount --
-  si no existieran ya en la imagen, Docker los crearía como root al
-  montarlos, y el proceso `runner` no podría escribir en ellos
-  (`ssh-keyscan` fallaría con "Permission denied", y el runner no podría
-  usar `_work` como caché de checkout/tools).
+- `actions-runner/_work` se pre-crea en la imagen, propiedad de
+  `runner`, antes de que Docker lo monte como volumen -- si no existiera
+  ya en la imagen, Docker lo crearía como root al montarlo, y el proceso
+  `runner` no podría usarlo como caché de checkout/tools.
 - `installdependencies.sh` del runner de Actions se ejecuta como root
   (necesita `apt-get`); todo lo demás corre como `runner`.
 
@@ -73,11 +70,6 @@ remove-token (`POST /orgs/{org}/actions/runners/remove-token`) y llama a
 `config.sh remove`, para no dejar el runner listado como "offline" en la
 organización. Es best-effort (`|| true` / `return 0` en cada paso) para
 no bloquear el apagado del contenedor si la API de GitHub falla.
-
-Antes de registrar, añade la clave de host de `github.com` a
-`known_hosts` con `ssh-keyscan` en cada arranque (no se asume presente,
-al ser una imagen nueva en cada rebuild, a diferencia de una máquina
-bare-metal persistente).
 
 `docker-compose.yml` le da `stop_grace_period: 30s` (por encima de los
 10s por defecto de Compose), porque esta cadena JWT -> installation
@@ -118,12 +110,17 @@ tiempo de ejecución, desde `$SECRETS_DIR` (ruta del host, fuera del
 repo, default `/etc/github-selfhosted-runners/secrets`):
 
 - `github-app-private-key.pem` -> `/home/runner/secrets/github-app-private-key.pem` (`:ro`)
-- `id_ed25519` -> `/home/runner/.ssh/id_ed25519` (`:ro`)
 
-Ambos ficheros deben ser propiedad de uid:gid `1001:1001` (el usuario
-`runner` fijado en el Dockerfile) en el host, o el contenedor no podrá
-leerlos pese al `:ro`. `id_ed25519` debe ser una clave dedicada a este
-runner (deploy key), no una clave personal ni la de `root` del host.
+Debe ser propiedad de uid:gid `1001:1001` (el usuario `runner` fijado en
+el Dockerfile) en el host, o el contenedor no podrá leerlo pese al
+`:ro`.
+
+Este runner no monta ninguna clave SSH: las etapas `preparation` e
+`implementation` de la pipeline de issues (las únicas que hacen `git
+push`) lo hacen por HTTPS con el `GITHUB_TOKEN` efímero del propio job
+de `issue-pipeline.yml` (`permissions: contents: write`, scopeado a
+esas dos etapas), no con una deploy key estática -- ver "Pipeline de
+issues dirigida por labels" en `CLAUDE.md`.
 
 Además, un volumen nombrado `runner-work` se monta en
 `actions-runner/_work`, para que la caché de checkout/tools no se pierda
@@ -132,7 +129,5 @@ en cada recreación del contenedor.
 ## Referencia cruzada
 
 - Workflow que consume este runner: `.github/workflows/issue-pipeline.yml`.
-- Composite action usada por sus etapas `preparation`/`implementation`:
-  `.github/actions/setup-ssh-and-git/action.yml`.
 - Convenciones generales de runners y de la pipeline de issues:
   `CLAUDE.md`.

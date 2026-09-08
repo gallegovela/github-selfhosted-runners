@@ -27,8 +27,7 @@ concreta.
 ## Imagen (`deploy-docker/Dockerfile`)
 
 - Base: `ubuntu:24.04` (igual que `claude/`).
-- Paquetes base: `ca-certificates`, `curl`, `git`, `openssl`,
-  `openssh-client`.
+- Paquetes base: `ca-certificates`, `curl`, `git`, `openssl`.
 - CLI `docker` + plugin `compose`, instalados desde el repositorio APT
   oficial de Docker. **Sin `dockerd` propio** -- ver "Docker-outside-of-
   Docker" más abajo. Sin `gh`, salvo que algún workflow consumidor lo
@@ -43,9 +42,14 @@ concreta.
   montado (ver más abajo) -- el gid de ese grupo varía entre hosts, así
   que se fija en build time vía `ARG`/variable de entorno
   (`DOCKER_GID` o similar), no hardcodeado.
-- `~/.ssh` y `actions-runner/_work` se pre-crean en la imagen, propiedad
-  de `runner`, por el mismo motivo que en `claude/Dockerfile` (evitar que
-  Docker los cree como root al montarlos).
+- `actions-runner/_work` se pre-crea en la imagen, propiedad de
+  `runner`, por el mismo motivo que en `claude/Dockerfile` (evitar que
+  Docker lo cree como root al montarlo).
+- `get-installation-token.sh` (ver "Registro y baja" más abajo) se copia
+  a `/home/runner/bin` y se añade al `PATH` -- además de usarlo el
+  propio `entrypoint.sh` para registrarse, queda disponible para que
+  cualquier step de un workflow consumidor que corra en este runner lo
+  invoque directamente.
 - `installdependencies.sh` del runner de Actions corre como root
   (necesita `apt-get`); todo lo demás corre como `runner`.
 - La imagen configura `git config --global --add safe.directory '*'`
@@ -76,18 +80,24 @@ Al recibir `SIGTERM`/`SIGINT`, se desregistra (JWT -> installation token
 la API de GitHub necesita más tiempo que el grace period por defecto de
 Compose).
 
-Sí necesita la clave SSH privada, la misma clave dedicada que ya monta
-`claude` (`SECRETS_DIR/id_ed25519`): el checkout de la app desplegada en
-sí lo sigue haciendo el workflow consumidor con `actions/checkout` y su
-token efímero estándar, pero el propio paso de deploy dentro de ese
-workflow puede necesitar clonar otros repos privados de la organización
+No necesita ninguna clave SSH. El checkout de la app desplegada en sí lo
+sigue haciendo el workflow consumidor con `actions/checkout` y su token
+efímero estándar, pero el propio paso de deploy dentro de ese workflow
+puede necesitar clonar otros repos privados de la organización
 (submódulos, dependencias internas) que ese token efímero no cubre --
-de ahí que este runner monte la misma clave que `claude` en vez de
-prescindir de ella (ver "Secretos y volúmenes"). Por el mismo motivo,
-el entrypoint añade la clave de host de `github.com` a `known_hosts`
-con `ssh-keyscan` en cada arranque, igual que `claude/entrypoint.sh` --
-si no, un `git clone` por SSH durante el propio paso de deploy se
-quedaría colgado en el prompt interactivo de verificación de host.
+para eso, `get-installation-token.sh` (`/home/runner/bin`, en el `PATH`)
+obtiene bajo demanda un installation access token de la misma GitHub App
+compartida que ya usa para registrarse (`GITHUB_APP_ID` +
+`GITHUB_APP_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY_PATH`, ya
+montados; el mismo mecanismo JWT -> installation token de los pasos 1-2
+de más arriba, extraído a un script propio en vez de duplicado inline,
+sin ningún secreto nuevo). Un step de un workflow consumidor lo invoca
+directamente para clonar por HTTPS
+(`git clone https://x-access-token:$(get-installation-token.sh)@github.com/...`).
+Precondición operativa: si la instalación de la GitHub App está limitada a
+"selected repositories", hay que añadir a esa lista los repos
+adicionales que el deploy necesite clonar; si está instalada a nivel de
+organización completa, no hace falta nada.
 
 ## Variables de entorno
 
@@ -118,11 +128,6 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
 - `github-app-private-key.pem`, montado desde `$SECRETS_DIR` igual que
   en `claude-runner` (`:ro`), propiedad del uid:gid del usuario `runner`
   de este runner en el host.
-- `id_ed25519`, montado desde `$SECRETS_DIR` igual que en
-  `claude-runner` (`:ro`) -- **es la misma clave dedicada, no una copia
-  distinta**: ambos runners comparten uid:gid 1001:1001 en el host, así
-  que no hay problema de permisos por reusarla. Ver "Registro y baja"
-  para el motivo (clonar repos privados adicionales durante el deploy).
 - **`/var/run/docker.sock` del host, montado `:rw`.** Esta es una
   **decisión de diseño consciente**, no un volumen más: un socket Docker
   da control root-equivalente sobre el host (cualquier proceso que pueda
@@ -150,6 +155,11 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
   (`DEPLOY_DIR/<proyecto>`), con los ficheros de configuración/datos
   persistentes de esa app, conocido por convención de nombre por su
   propio pipeline consumidor.
+
+  `DEPLOY_DIR/<proyecto>` debe pertenecer a uid:gid `1001:1001` (el
+  mismo usuario `runner`) antes de que un workflow consumidor haga
+  `git pull`/`git clone` ahí -- ver las instrucciones operativas en
+  `README.md`, sección "Estado y secretos".
 
 ## Decisión de diseño: Docker-outside-of-Docker y flujo de despliegue
 
@@ -194,6 +204,30 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
   `docker-compose.yml`, pero cada pipeline consumidor debe nombrar sus
   servicios/redes evitando colisión con los del runner.
 
+- **Propiedad real de `DEPLOY_DIR/<proyecto>`, distinta del problema de
+  `safe.directory`**: el `Permission denied` real al escribir dentro de
+  `.git/` (issue #5) no es el mismo fallo que el "dubious ownership" del
+  issue #3 -- `safe.directory` silencia una comprobación de seguridad de
+  git sobre el propietario del directorio, pero no concede permisos de
+  escritura reales a nivel de filesystem. Se ha optado por documentar la
+  propiedad esperada (`1001:1001`) como responsabilidad operativa (ver
+  "Secretos y volúmenes" y `README.md`) en vez de añadir una
+  comprobación/healthcheck automática al arranque del contenedor,
+  coherente con la misma decisión ya tomada para `safe.directory` más
+  abajo (documentar en vez de automatizar). Si en el futuro se quiere
+  una comprobación activa, que sea un issue aparte.
+
+- **Installation token de la GitHub App en vez de una deploy key SSH
+  estática** para clonar repos privados adicionales durante el deploy
+  (ver "Registro y baja"): un token de vida corta (~1h) pedido bajo
+  demanda reutiliza infraestructura ya existente en este runner (el
+  mismo mecanismo JWT -> installation token del registro) sin añadir
+  ningún secreto nuevo, frente a una clave SSH estática compartida entre
+  runners. Al dejar de necesitarse SSH en ningún runner de este repo,
+  también permitió retirar `openssh-client` y la pre-creación de
+  `~/.ssh`/`ssh-keyscan` de ambas imágenes, y el volumen `id_ed25519` de
+  `docker-compose.yml`.
+
 - **`safe.directory` con comodín (`'*'`), no rutas concretas**:
   `DEPLOY_DIR/<proyecto>` es dinámico (un subdirectorio por app
   desplegada, con nombre decidido por cada pipeline consumidor), así que
@@ -213,7 +247,12 @@ Fijada por el propio `docker-compose.yml` (no configurable por `.env`):
   Issue #3 ("Error en action que usa el runner deploy-docker"): fallo
   "dubious ownership" de git en `DEPLOY_DIR/<proyecto>` por desajuste de
   propietario entre el host y el uid de `runner`, resuelto con
-  `safe.directory '*'`.
+  `safe.directory '*'`. Issue #5 ("Problema con runner deploy-docker"):
+  `Permission denied` real al escribir `.git/FETCH_HEAD` en
+  `DEPLOY_DIR/<proyecto>` -- propiedad real de filesystem, no
+  "dubious ownership" -- y sustitución de la deploy key SSH por un
+  installation token de la GitHub App para clonar repos privados
+  adicionales durante el deploy.
 - Convenciones generales de runners: `CLAUDE.md`.
 - Runner de referencia para estructura de imagen/registro:
   `spec/runner-claude.md`.

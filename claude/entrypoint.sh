@@ -68,12 +68,6 @@ deregister() {
   ./config.sh remove --token "$del_token" || true
 }
 
-# github.com's known host key, added on every start rather than
-# assumed present -- this is a fresh image, not the persistent bare-
-# metal box the rest of the design was first written for.
-mkdir -p ~/.ssh
-ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null || true
-
 trap deregister EXIT INT TERM
 
 register

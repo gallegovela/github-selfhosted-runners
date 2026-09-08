@@ -42,7 +42,7 @@ correspondiente:
 
 - [`claude/`](claude/) — runner para el workflow
   [`.github/workflows/issue-pipeline.yml`](.github/workflows/issue-pipeline.yml)
-  (label `ionosL1`). Incluye `git`, `gh`, `ssh` y la CLI de `claude`.
+  (label `ionosL1`). Incluye `git`, `gh` y la CLI de `claude`.
   Detalle completo en [`spec/runner-claude.md`](spec/runner-claude.md).
 - [`deploy-docker/`](deploy-docker/) — runner genérico de despliegue
   (label `deployDocker`), consumido por los pipelines de otras apps de
@@ -111,14 +111,18 @@ Nada sensible se hornea en la imagen. Se monta como volumen en tiempo de
 ejecución:
 
 - La clave privada de la GitHub App (`.pem`).
-- La clave SSH privada que usan los workflows para hacer `git push`.
 
 `claude` no requiere ningún estado persistente en este runner: se
 autentica con `CLAUDE_CODE_OAUTH_TOKEN` (token de larga duración
 generado con `claude setup-token`), guardado como secreto de
 organización en GitHub y pasado como variable de entorno a nivel de
 workflow (no de este repo) en cada ejecución -- no hace falta login
-interactivo ni volumen para `~/.claude`.
+interactivo ni volumen para `~/.claude`. Tampoco necesita ninguna clave
+SSH: las etapas `preparation`/`implementation` de la pipeline de issues
+hacen `git push` por HTTPS con el `GITHUB_TOKEN` efímero del propio job
+(`permissions: contents: write`, scopeado a esas dos etapas), no con una
+deploy key estática (ver "Pipeline de issues dirigida por labels" más
+abajo y [`spec/runner-claude.md`](spec/runner-claude.md)).
 
 Los certificados y claves privadas de todos los runners viven fuera del
 repo, en una ruta del sistema: `SECRETS_DIR` (configurable en `.env`,
@@ -132,25 +136,24 @@ host y colocar ahí sus ficheros:
 ```
 sudo mkdir -p /etc/github-selfhosted-runners/secrets
 sudo cp github-app-private-key.pem /etc/github-selfhosted-runners/secrets/
-sudo cp id_ed25519 /etc/github-selfhosted-runners/secrets/
 # El contenedor corre como `runner` (uid:gid 1001:1001, fijado en
-# claude/Dockerfile), no como root -- estos ficheros deben ser suyos,
-# no de root, o el runner no podrá leerlos pese al `:ro` del mount.
-sudo chown 1001:1001 /etc/github-selfhosted-runners/secrets/github-app-private-key.pem \
-                      /etc/github-selfhosted-runners/secrets/id_ed25519
+# claude/Dockerfile), no como root -- este fichero debe ser suyo, no de
+# root, o el runner no podrá leerlo pese al `:ro` del mount.
+sudo chown 1001:1001 /etc/github-selfhosted-runners/secrets/github-app-private-key.pem
 sudo chmod 700 /etc/github-selfhosted-runners/secrets
-sudo chmod 600 /etc/github-selfhosted-runners/secrets/github-app-private-key.pem \
-               /etc/github-selfhosted-runners/secrets/id_ed25519
+sudo chmod 600 /etc/github-selfhosted-runners/secrets/github-app-private-key.pem
 ```
 
-`docker-compose.yml` monta esos ficheros desde `$SECRETS_DIR/`
-dentro del contenedor; no forman parte del repo ni del `.env`.
+`docker-compose.yml` monta ese fichero desde `$SECRETS_DIR/`
+dentro del contenedor; no forma parte del repo ni del `.env`.
 
-`id_ed25519` debe ser una clave dedicada a este runner (deploy key),
-no una clave personal ni la de `root` del host -- un símlink a
-`/root/.ssh/id_ed25519`, por ejemplo, mezclaría la identidad del
-runner con la del administrador de la máquina. Solo lo usa
-`claude-runner`; `deploy-docker-runner` no la monta (ver más abajo).
+Ningún runner de este repo monta ya ninguna clave SSH: `claude-runner`
+pushea con el `GITHUB_TOKEN` efímero del job (ver arriba) y
+`deploy-docker-runner` obtiene, bajo demanda, un installation access
+token de esta misma GitHub App para clonar por HTTPS otros repos
+privados de la organización durante el deploy (ver
+[`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md), sección
+"Registro y baja").
 
 `deploy-docker-runner` añade estado propio, fuera del patrón anterior de
 "solo secretos de solo lectura": monta `/var/run/docker.sock` del host
@@ -158,6 +161,18 @@ runner con la del administrador de la máquina. Solo lo usa
 (variable de `.env`, ruta del host fuera del repo). Es una decisión de
 diseño consciente, documentada en detalle en
 [`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md).
+
+`DEPLOY_DIR/<proyecto>` debe pertenecer a uid:gid `1001:1001` (el mismo
+usuario `runner`) antes de que un workflow consumidor haga
+`git pull`/`git clone` ahí -- igual que `github-app-private-key.pem`
+más arriba. Si `deploy-docker-runner` crea ese subdirectorio por
+primera vez (el primer `git clone` de un workflow consumidor), ya queda
+con el propietario correcto y no hace falta ninguna acción manual. El
+problema solo aparece si `DEPLOY_DIR/<proyecto>` ya existía de antes con
+otro propietario (root, otro usuario, un checkout manual previo) -- en
+ese caso, aplicar `sudo chown -R 1001:1001 DEPLOY_DIR/<proyecto>` antes
+de que el pipeline consumidor use el runner (ver
+[`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md)).
 
 ## Pipeline de issues dirigida por labels
 
