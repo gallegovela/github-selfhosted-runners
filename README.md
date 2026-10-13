@@ -118,11 +118,12 @@ generado con `claude setup-token`), guardado como secreto de
 organización en GitHub y pasado como variable de entorno a nivel de
 workflow (no de este repo) en cada ejecución -- no hace falta login
 interactivo ni volumen para `~/.claude`. Tampoco necesita ninguna clave
-SSH: las etapas `preparation`/`implementation` de la pipeline de issues
-hacen `git push` por HTTPS con el secreto de repo `GH_TOKEN` (un PAT),
-pasado como `token:` a `actions/checkout` en esas dos etapas, no con el
-`GITHUB_TOKEN` efímero del job ni con una deploy key estática (ver
-"Pipeline de issues dirigida por labels" más abajo y
+SSH: toda la pipeline de issues (comprobación de permisos, `git push`
+en `preparation`/`implementation`, comentarios de resultado, `gh pr
+create` en `merge`) se autentica frente a GitHub con el secreto de
+repo `GH_TOKEN` (un PAT) -- no con el `GITHUB_TOKEN` efímero de cada
+job ni con una deploy key estática (ver "Pipeline de issues dirigida
+por labels" más abajo y
 [`spec/runner-claude.md`](spec/runner-claude.md)).
 
 Los certificados y claves privadas de todos los runners viven fuera del

@@ -109,11 +109,15 @@ completos y al día. La autenticación de `claude` en la pipeline usa
 duración generado con `claude setup-token`), inyectado a nivel de
 workflow -- no hace falta login interactivo en el runner.
 
-Las etapas que necesitan `git push` (`preparation`, `implementation`)
-lo hacen por HTTPS con el secreto de repo `GH_TOKEN` (un PAT), pasado
-como `token:` a `actions/checkout` en esas dos etapas para que quede
-persistido en las credenciales de git -- no con el `GITHUB_TOKEN`
-efímero del job ni con una clave SSH estática.
+Toda la pipeline se autentica frente a GitHub con un único secreto de
+repo, `GH_TOKEN` (un PAT) -- no con el `GITHUB_TOKEN` efímero de cada
+job ni con una clave SSH estática. Las etapas que necesitan `git push`
+(`preparation`, `implementation`) lo pasan como `token:` a
+`actions/checkout` para que quede persistido en las credenciales de
+git; todas las llamadas al CLI `gh` (comprobación de permiso en
+`check-permission`, comentarios de resultado en cada etapa, `gh pr
+create` en `merge`) lo exponen como variable de entorno `GH_TOKEN` en
+el paso correspondiente.
 
 ## Filosofía de secretos y estado
 

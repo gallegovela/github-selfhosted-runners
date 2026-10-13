@@ -115,13 +115,13 @@ Debe ser propiedad de uid:gid `1001:1001` (el usuario `runner` fijado en
 el Dockerfile) en el host, o el contenedor no podrá leerlo pese al
 `:ro`.
 
-Este runner no monta ninguna clave SSH: las etapas `preparation` e
-`implementation` de la pipeline de issues (las únicas que hacen `git
-push`) lo hacen por HTTPS con el secreto de repo `GH_TOKEN` (un PAT),
-pasado como `token:` a `actions/checkout` en esas dos etapas de
-`issue-pipeline.yml`, no con el `GITHUB_TOKEN` efímero del job ni con
-una deploy key estática -- ver "Pipeline de issues dirigida por
-labels" en `CLAUDE.md`.
+Este runner no monta ninguna clave SSH: toda la pipeline de issues
+definida en `issue-pipeline.yml` (comprobación de permisos, `git push`
+en `preparation`/`implementation`, comentarios de resultado en cada
+etapa, `gh pr create` en `merge`) se autentica frente a GitHub con el
+secreto de repo `GH_TOKEN` (un PAT) -- no con el `GITHUB_TOKEN`
+efímero de cada job ni con una deploy key estática -- ver "Pipeline de
+issues dirigida por labels" en `CLAUDE.md`.
 
 Además, un volumen nombrado `runner-work` se monta en
 `actions-runner/_work`, para que la caché de checkout/tools no se pierda
