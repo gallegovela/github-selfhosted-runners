@@ -117,10 +117,11 @@ el Dockerfile) en el host, o el contenedor no podrá leerlo pese al
 
 Este runner no monta ninguna clave SSH: las etapas `preparation` e
 `implementation` de la pipeline de issues (las únicas que hacen `git
-push`) lo hacen por HTTPS con el `GITHUB_TOKEN` efímero del propio job
-de `issue-pipeline.yml` (`permissions: contents: write`, scopeado a
-esas dos etapas), no con una deploy key estática -- ver "Pipeline de
-issues dirigida por labels" en `CLAUDE.md`.
+push`) lo hacen por HTTPS con el secreto de repo `GH_TOKEN` (un PAT),
+pasado como `token:` a `actions/checkout` en esas dos etapas de
+`issue-pipeline.yml`, no con el `GITHUB_TOKEN` efímero del job ni con
+una deploy key estática -- ver "Pipeline de issues dirigida por
+labels" en `CLAUDE.md`.
 
 Además, un volumen nombrado `runner-work` se monta en
 `actions-runner/_work`, para que la caché de checkout/tools no se pierda

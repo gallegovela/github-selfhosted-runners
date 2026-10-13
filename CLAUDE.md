@@ -110,9 +110,10 @@ duración generado con `claude setup-token`), inyectado a nivel de
 workflow -- no hace falta login interactivo en el runner.
 
 Las etapas que necesitan `git push` (`preparation`, `implementation`)
-lo hacen por HTTPS con el `GITHUB_TOKEN` efímero del propio job
-(`permissions: contents: write`, scopeado a esas dos etapas) -- no con
-una clave SSH estática.
+lo hacen por HTTPS con el secreto de repo `GH_TOKEN` (un PAT), pasado
+como `token:` a `actions/checkout` en esas dos etapas para que quede
+persistido en las credenciales de git -- no con el `GITHUB_TOKEN`
+efímero del job ni con una clave SSH estática.
 
 ## Filosofía de secretos y estado
 

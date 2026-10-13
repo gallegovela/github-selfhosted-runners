@@ -119,10 +119,11 @@ organización en GitHub y pasado como variable de entorno a nivel de
 workflow (no de este repo) en cada ejecución -- no hace falta login
 interactivo ni volumen para `~/.claude`. Tampoco necesita ninguna clave
 SSH: las etapas `preparation`/`implementation` de la pipeline de issues
-hacen `git push` por HTTPS con el `GITHUB_TOKEN` efímero del propio job
-(`permissions: contents: write`, scopeado a esas dos etapas), no con una
-deploy key estática (ver "Pipeline de issues dirigida por labels" más
-abajo y [`spec/runner-claude.md`](spec/runner-claude.md)).
+hacen `git push` por HTTPS con el secreto de repo `GH_TOKEN` (un PAT),
+pasado como `token:` a `actions/checkout` en esas dos etapas, no con el
+`GITHUB_TOKEN` efímero del job ni con una deploy key estática (ver
+"Pipeline de issues dirigida por labels" más abajo y
+[`spec/runner-claude.md`](spec/runner-claude.md)).
 
 Los certificados y claves privadas de todos los runners viven fuera del
 repo, en una ruta del sistema: `SECRETS_DIR` (configurable en `.env`,
@@ -148,7 +149,7 @@ sudo chmod 600 /etc/github-selfhosted-runners/secrets/github-app-private-key.pem
 dentro del contenedor; no forma parte del repo ni del `.env`.
 
 Ningún runner de este repo monta ya ninguna clave SSH: `claude-runner`
-pushea con el `GITHUB_TOKEN` efímero del job (ver arriba) y
+pushea con el secreto de repo `GH_TOKEN` (ver arriba) y
 `deploy-docker-runner` obtiene, bajo demanda, un installation access
 token de esta misma GitHub App para clonar por HTTPS otros repos
 privados de la organización durante el deploy (ver
