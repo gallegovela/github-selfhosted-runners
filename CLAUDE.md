@@ -126,3 +126,10 @@ de GitHub App, claves SSH) se monta como volumen en tiempo de ejecución
 desde `SECRETS_DIR`, una ruta del sistema fuera del repo. Ver la sección
 "Estado y secretos" del `README.md` para el detalle operativo (permisos,
 uid/gid, por qué no usar un símlink a una clave personal).
+
+Dos runners tocan Docker, de dos formas distintas y a propósito:
+`deploy-docker` usa el Docker del host a través de su socket, porque lo
+que despliega tiene que sobrevivirle; `claude-test` usa un Docker propio
+(contenedor `claude-test-dind`, Docker-in-Docker), porque lo que levanta
+son entornos de prueba efímeros que no deben poder tocar lo desplegado.
+El porqué de cada uno está en su `spec/runner-*.md`.

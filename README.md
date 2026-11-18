@@ -51,6 +51,13 @@ correspondiente:
   montado, Docker-outside-of-Docker) pero no decide qué se despliega.
   Detalle completo en
   [`spec/runner-deploy-docker.md`](spec/runner-deploy-docker.md).
+- [`claude-test/`](claude-test/) — runner para las etapas de una
+  pipeline de issues que, además de ejecutar `claude`, construyen y
+  prueban la rama en contenedores (label `ionos-l1-test`). Lleva lo
+  mismo que `claude/` más el cliente `docker`, conectado a un `dockerd`
+  propio (servicio `claude-test-dind`, Docker-in-Docker), aislado del
+  Docker del host y de lo que despliega `deploy-docker`. Detalle
+  completo en [`spec/runner-claude-test.md`](spec/runner-claude-test.md).
 
 Al añadir un runner nuevo se crean tres cosas a la vez: la carpeta con su
 `Dockerfile`/`entrypoint.sh` (minimal para lo que ese workflow concreto
