@@ -42,7 +42,8 @@ correspondiente:
 
 - [`claude/`](claude/) — runner para el workflow
   [`.github/workflows/issue-pipeline.yml`](.github/workflows/issue-pipeline.yml)
-  (label `ionosL1`). Incluye `git`, `gh` y la CLI de `claude`.
+  (label `ionosL1`). Incluye `git`, `gh`, la CLI de `claude` y el plugin
+  de Codex para Claude Code (con Node y la CLI `codex`).
   Detalle completo en [`spec/runner-claude.md`](spec/runner-claude.md).
 - [`deploy-docker/`](deploy-docker/) — runner genérico de despliegue
   (label `deployDocker`), consumido por los pipelines de otras apps de
@@ -118,6 +119,14 @@ Nada sensible se hornea en la imagen. Se monta como volumen en tiempo de
 ejecución:
 
 - La clave privada de la GitHub App (`.pem`).
+
+Y en un volumen nombrado, no en `$SECRETS_DIR`:
+
+- El login de Codex de `claude-runner` y `claude-test-runner`
+  (`~/.codex`, volúmenes `codex-home` y `codex-home-claude-test`). Se hace
+  una vez por runner, con `docker exec -it gh-runner-claude codex login
+  --device-auth` (ver "Codex" en
+  [`spec/runner-claude.md`](spec/runner-claude.md)).
 
 `claude` no requiere ningún estado persistente en este runner: se
 autentica con `CLAUDE_CODE_OAUTH_TOKEN` (token de larga duración
