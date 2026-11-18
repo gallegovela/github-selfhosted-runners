@@ -13,8 +13,9 @@ label `ionosL1`, y los jobs de esa pipeline lo reclaman con
 `runs-on: ionos-l1-claude`.
 
 Es deliberadamente minimal: solo lleva lo que esa pipeline necesita
-(`git`, `gh`, la CLI de `claude`), no el toolchain propio de
-ningún proyecto consumidor (Python/Node/Docker...). Si una etapa futura
+(`git`, `gh`, la CLI de `claude` y el plugin de Codex con lo que este
+requiere: Node y la CLI `codex`), no el toolchain propio de ningún
+proyecto consumidor (Python/Docker...). Si una etapa futura
 necesitara compilar o testear el código de un repo concreto, esas
 herramientas se añadirían a este Dockerfile entonces, no de forma
 preventiva.
@@ -33,6 +34,13 @@ preventiva.
 - CLI de `claude` instalada de forma nativa vía
   `curl -fsSL https://claude.ai/install.sh | bash`, que la deja en
   `~/.local/bin` (añadido al `PATH`).
+- Node.js (`NODE_MAJOR`, 22 por defecto) desde el repositorio APT
+  oficial de NodeSource, y la CLI de Codex (`npm install -g
+  @openai/codex@${CODEX_VERSION}`, fijada por versión) instalados para
+  todo el sistema. Los workflows que usan `actions/setup-node` siguen
+  teniendo su propio Node primero en el `PATH`.
+- Plugin de Codex para Claude Code (`openai/codex-plugin-cc`), ver
+  "Codex" más abajo.
 - Usuario no root: el runner de GitHub Actions rechaza configurarse/
   ejecutarse como root, y esto no se fuerza con
   `RUNNER_ALLOW_RUNASROOT`. Se crea el usuario `runner` con uid/gid
@@ -85,6 +93,53 @@ como secreto de **organización** en GitHub y pasado como variable de
 entorno a nivel de workflow (en `issue-pipeline.yml`, no en este repo) en
 cada ejecución.
 
+## Codex
+
+La imagen incluye el plugin de Codex para Claude Code
+([openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc)):
+comandos `/codex:review`, `/codex:adversarial-review`, `/codex:rescue`,
+etc., y el subagente `codex:codex-rescue`, para que los agentes de la
+pipeline puedan pedir una revisión o delegar una tarea en Codex.
+
+Equivalencias con la instalación interactiva:
+
+| Interactivo | En la imagen |
+| --- | --- |
+| `/plugin marketplace add openai/codex-plugin-cc` | `claude plugin marketplace add openai/codex-plugin-cc` (al construir) |
+| `/plugin install codex@openai-codex` | `claude plugin install codex@openai-codex` (al construir, ámbito de usuario en `~/.claude`) |
+| `/reload-plugins` | No hace falta: cada `claude -p` es un proceso nuevo |
+| `/codex:setup` (instalar Codex) | `npm install -g @openai/codex` (al construir) |
+| `/codex:setup` (login) | Una vez, a mano, con `docker exec` (abajo) |
+
+El login de Codex es un secreto y no se hornea en la imagen. Se guarda en
+`~/.codex`, que es un volumen propio (`codex-home` en `claude-runner`,
+`codex-home-claude-test` en `claude-test-runner`), así que sobrevive a
+las recreaciones del contenedor y Codex puede renovar sus tokens. Se hace
+una vez por runner, con el contenedor arrancado:
+
+```bash
+# Suscripción de ChatGPT (sin navegador en el servidor: código de dispositivo)
+docker exec -it gh-runner-claude codex login --device-auth
+# o con una API key de OpenAI (se lee de stdin, no queda en el historial)
+docker exec -i gh-runner-claude codex login --with-api-key < fichero-con-la-key
+
+# Comprobar (equivale a /codex:setup)
+docker exec gh-runner-claude codex login status
+```
+
+Lo mismo con `gh-runner-claude-test`. Si se borra el volumen, hay que
+repetir el login.
+
+El "review gate" del plugin (hook `Stop` que hace que Codex revise cada
+respuesta de Claude antes de terminar) queda **desactivado**, que es su
+valor por defecto: en CI puede encadenar Claude y Codex en bucle y gastar
+el uso de las dos suscripciones. No se activa con
+`/codex:setup --enable-review-gate` en estos runners.
+
+Para actualizar Codex o el plugin se reconstruye la imagen: el plugin se
+descarga en su última versión al construir y Codex en la de
+`CODEX_VERSION`.
+
 ## Variables de entorno
 
 Requeridas (sin default, `docker-compose.yml` falla si faltan):
@@ -125,7 +180,8 @@ issues dirigida por labels" en `CLAUDE.md`.
 
 Además, un volumen nombrado `runner-work` se monta en
 `actions-runner/_work`, para que la caché de checkout/tools no se pierda
-en cada recreación del contenedor.
+en cada recreación del contenedor, y `codex-home` en `~/.codex`, con el
+login de Codex (ver "Codex").
 
 ## Referencia cruzada
 

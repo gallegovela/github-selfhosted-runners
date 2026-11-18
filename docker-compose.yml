@@ -29,6 +29,10 @@ services:
       # Runner work directory, so the tool/checkout cache isn't lost
       # on every container recreation.
       - runner-work:/home/runner/actions-runner/_work
+      # Codex CLI login (ChatGPT or API key) for the Codex plugin: done
+      # once with `docker exec`, survives recreations -- see
+      # spec/runner-claude.md, "Codex".
+      - codex-home:/home/runner/.codex
 
   deploy-docker-runner:
     profiles: ["deploy-docker"]
@@ -97,6 +101,8 @@ services:
     volumes:
       - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
       - runner-work-claude-test:/home/runner/actions-runner/_work
+      # Own Codex login, same as claude-runner's codex-home.
+      - codex-home-claude-test:/home/runner/.codex
     networks:
       - claude-test
     depends_on:
@@ -138,3 +144,5 @@ volumes:
   runner-work-deploy-docker:
   runner-work-claude-test:
   claude-test-dind-data:
+  codex-home:
+  codex-home-claude-test:

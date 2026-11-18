@@ -14,6 +14,7 @@
 # State that must come in as a volume, never baked into this image:
 #   - the GitHub App private key (.pem) the entrypoint uses to register
 #     this as an organization runner (same App as claude-runner)
+#   - the Codex login (~/.codex, its own volume; see spec/runner-claude.md)
 #
 # claude authenticates via CLAUDE_CODE_OAUTH_TOKEN, set by the consuming
 # workflow, exactly like claude-runner.
@@ -58,6 +59,24 @@ RUN install -m 0755 -d /etc/apt/keyrings \
       docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
+# Node.js (system-wide) + Codex CLI, for the Codex plugin below: its
+# hooks and commands run `node .../codex-companion.mjs`, which drives the
+# global `codex` CLI. Node from NodeSource's official apt repo (Ubuntu's
+# own lags); workflows that call actions/setup-node still get their own
+# Node first on PATH. Codex pinned so image rebuilds are reproducible --
+# bump CODEX_VERSION on purpose.
+ARG NODE_MAJOR=22
+ARG CODEX_VERSION=0.170.0
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /etc/apt/keyrings/nodesource.asc \
+    && chmod a+r /etc/apt/keyrings/nodesource.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_${NODE_MAJOR}.x nodistro main" \
+      > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g "@openai/codex@${CODEX_VERSION}" \
+    && npm cache clean --force
+
 # Same non-root user as claude/Dockerfile (uid/gid 1001:1001), so the
 # shared GitHub App key on the host keeps a single owner. No `docker`
 # group needed: the daemon is reached over TCP, not through a socket.
@@ -82,6 +101,17 @@ USER runner
 # Native claude CLI, same install method as claude/Dockerfile.
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/home/runner/.local/bin:${PATH}"
+
+# Codex plugin for Claude Code (openai/codex-plugin-cc): the non-interactive
+# equivalent of `/plugin marketplace add openai/codex-plugin-cc` +
+# `/plugin install codex@openai-codex` (user scope, ~/.claude). No
+# /reload-plugins needed: every `claude -p` is a fresh process. The
+# `/codex:setup` part (Codex login) can't be baked in -- it's a secret --
+# see spec/runner-claude.md, "Codex". The plugin's stop-time review gate
+# stays off (its default): it would loop Claude and Codex in CI.
+RUN claude plugin marketplace add openai/codex-plugin-cc \
+    && claude plugin install codex@openai-codex \
+    && mkdir -p /home/runner/.codex
 
 COPY --chown=runner:runner entrypoint.sh /home/runner/entrypoint.sh
 RUN chmod +x /home/runner/entrypoint.sh

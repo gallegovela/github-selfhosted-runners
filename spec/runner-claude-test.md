@@ -33,8 +33,10 @@ Igual que `claude/Dockerfile` (ver `spec/runner-claude.md`), más:
 - Mismo usuario `runner` 1001:1001. No necesita el grupo `docker`,
   porque no hay socket.
 
-No lleva Node: los workflows lo instalan con `actions/setup-node`, que lo
-deja en la caché de herramientas del volumen `_work`.
+También lleva Node, la CLI `codex` y el plugin de Codex, igual que
+`claude/Dockerfile` (ver "Codex" en `spec/runner-claude.md`). Los
+workflows siguen instalando su versión de Node con `actions/setup-node`,
+que queda primero en el `PATH`.
 
 ## Registro y baja (`claude-test/entrypoint.sh`)
 
@@ -113,6 +115,9 @@ Fijadas por `docker-compose.yml`:
 - `runner-work-claude-test` en `actions-runner/_work` (checkouts y caché
   de herramientas, incluido Node).
 - `claude-test-dind-data` en `/var/lib/docker` del contenedor DinD.
+- `codex-home-claude-test` en `~/.codex`: el login de Codex de este
+  runner (`docker exec -it gh-runner-claude-test codex login --device-auth`,
+  ver "Codex" en `spec/runner-claude.md`).
 
 ## Imágenes que no se pueden descargar
 
