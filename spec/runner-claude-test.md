@@ -114,6 +114,18 @@ Fijadas por `docker-compose.yml`:
   de herramientas, incluido Node).
 - `claude-test-dind-data` en `/var/lib/docker` del contenedor DinD.
 
+## Imágenes que no se pueden descargar
+
+DinD descarga sus imágenes por su cuenta: no ve las que ya tiene el
+Docker del host. Si un consumidor usa una imagen que ya no se publica
+(caso de `minio/minio`, retirada de Docker Hub y quay.io), se copia desde
+el Docker del host, una vez y cada vez que se borre
+`claude-test-dind-data`:
+
+```bash
+docker save minio/minio:latest | docker exec -i gh-runner-claude-test-dind docker load
+```
+
 ## Mantenimiento
 
 La caché de build de DinD crece con cada rama probada (los consumidores
@@ -126,7 +138,9 @@ docker exec gh-runner-claude-test-dind docker image prune -af --filter until=168
 ```
 
 Borrar el volumen `claude-test-dind-data` también es seguro: solo se
-pierde la caché.
+pierde la caché (y las imágenes cargadas a mano, que hay que volver a
+cargar). `image prune` tampoco debe borrar esas imágenes: usa el filtro
+de fecha o vuelve a cargarlas después.
 
 ## Referencia cruzada
 
