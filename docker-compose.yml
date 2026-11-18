@@ -72,6 +72,69 @@ services:
       - ${DEPLOY_DIR:?DEPLOY_DIR is required}:${DEPLOY_DIR:?DEPLOY_DIR is required}
       - runner-work-deploy-docker:/home/runner/actions-runner/_work
 
+  # Runner for pipeline stages that build and test a branch in
+  # containers (runs-on: ionos-l1-test). Same as claude-runner plus the
+  # docker CLI, pointed at its own Docker-in-Docker sidecar below -- see
+  # spec/runner-claude-test.md.
+  claude-test-runner:
+    profiles: ["claude-test"]
+    build: ./claude-test
+    image: gallegovela-github-selfhosted-runners/claude-test-runner:latest
+    container_name: gh-runner-claude-test
+    restart: unless-stopped
+    # Same deregister chain as claude-runner.
+    stop_grace_period: 30s
+    environment:
+      GITHUB_ORG: ${GITHUB_ORG:?GITHUB_ORG is required}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:?GITHUB_APP_ID is required}
+      GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:?GITHUB_APP_INSTALLATION_ID is required}
+      GITHUB_APP_PRIVATE_KEY_PATH: /home/runner/secrets/github-app-private-key.pem
+      RUNNER_NAME: ${CLAUDE_TEST_RUNNER_NAME:-claude-test-runner-1}
+      RUNNER_LABELS: ${CLAUDE_TEST_RUNNER_LABELS:-ionos-l1-test}
+      # The runner passes its environment on to every job, so the docker
+      # CLI in workflow steps talks to the sidecar, never to the host.
+      DOCKER_HOST: tcp://claude-test-dind:2375
+    volumes:
+      - ${SECRETS_DIR:-/etc/github-selfhosted-runners/secrets}/github-app-private-key.pem:/home/runner/secrets/github-app-private-key.pem:ro
+      - runner-work-claude-test:/home/runner/actions-runner/_work
+    networks:
+      - claude-test
+    depends_on:
+      - claude-test-dind
+
+  # Docker-in-Docker daemon used only by claude-test-runner. Privileged
+  # (dockerd needs it), plain TCP without TLS, reachable only on the
+  # private `claude-test` network below -- no published port, no other
+  # service attached. See spec/runner-claude-test.md for the trade-offs.
+  claude-test-dind:
+    profiles: ["claude-test"]
+    image: docker:${CLAUDE_TEST_DIND_VERSION:-28}-dind
+    container_name: gh-runner-claude-test-dind
+    restart: unless-stopped
+    privileged: true
+    environment:
+      # Empty: the image's entrypoint then listens on tcp://0.0.0.0:2375
+      # without TLS (plus its local unix socket) and adds --tls=false
+      # itself, which recent dockerd versions require for plain TCP.
+      DOCKER_TLS_CERTDIR: ""
+    command:
+      # Containers inside DinD inherit the outer network's MTU; a lower
+      # value avoids stalled image pulls on hosts with MTU < 1500.
+      - --mtu=${CLAUDE_TEST_DIND_MTU:-1500}
+    volumes:
+      # Image layers and build cache, so test images rebuild fast across
+      # runs and container recreations.
+      - claude-test-dind-data:/var/lib/docker
+    networks:
+      - claude-test
+
+networks:
+  # Private to the claude-test pair: the unauthenticated dind API on
+  # :2375 is never reachable from other runners.
+  claude-test:
+
 volumes:
   runner-work:
   runner-work-deploy-docker:
+  runner-work-claude-test:
+  claude-test-dind-data:
